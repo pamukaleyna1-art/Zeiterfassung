@@ -109,7 +109,7 @@ let viewY, viewM;
 function blank(){
   return {
     settings:{ name:"", soll:[8,8,8,8,7,0,0], eintritt:"", urlaub:25, urlaubRest:0, saldoStart:0, f2412:1, f3112:1, setupDone:false },
-    projects:[], entries:[], absences:[], extraDays:[], lastProject:null, lastBackup:null
+    projects:[], entries:[], absences:[], extraDays:[], lastProject:null, lastBackup:null, paused:null
   };
 }
 function load(){
@@ -298,17 +298,27 @@ function renderSetup(){
 function renderStempeln(){
   const r = running(), t = day(todayKey());
   const cum = saldoUntil(todayKey());
-  app.innerHTML = `
+  const P = !r && S.paused ? S.paused : null;
+  app.innerHTML = P ? `
+  <div class="card">
+    <div class="timer" id="clock" style="color:var(--warn)">${dur(Date.now()-P.since)}</div>
+    <div class="sub">☕ Pause seit ${hm(P.since)} · ${esc(projName(P.projectId))}</div>
+    <button class="big go" id="bResume">▶ Weiter arbeiten</button>
+    <div class="actions"><button class="btn" id="bEnd">Feierabend (Pause beenden ohne weiterzuarbeiten)</button></div>
+  </div>` + stempelRest(t, cum) : `
   <div class="card">
     <div class="timer" id="clock">${r ? dur(Date.now()-r.start) : "00:00:00"}</div>
     <div class="sub">${r ? "läuft seit "+hm(r.start)+" · "+esc(projName(r.projectId)) : "Nicht eingestempelt"}</div>
     ${r ? `` : `<label>Projekt</label><select id="pSel">${projectOptions(S.lastProject)}</select>
                <label>Notiz / Tätigkeit (optional)</label><input id="pNote" placeholder="z.B. Grundriss EG überarbeitet">`}
-    ${r ? `<button class="big stop" id="bStop">■ Stopp</button>
+    ${r ? `<div class="row" style="gap:10px"><button class="big" id="bPause" style="background:var(--warn)">⏸ Pause</button><button class="big stop" id="bStop">■ Feierabend</button></div>
            <div class="actions"><button class="btn" id="bSwitch">⇄ Projekt wechseln</button><button class="btn" id="bNote">✎ Notiz</button></div>`
         : `<button class="big go" id="bStart">▶ Start</button>`}
-    <p class="muted" style="text-align:center;margin:10px 0 0">Pause: einfach Stopp drücken und danach wieder Start.</p>
-  </div>
+  </div>` + stempelRest(t, cum);
+  bindStempeln(r);
+}
+function stempelRest(t, cum){
+  return `
   <div class="card">
     <h2>Heute</h2>
     <div class="kpis">
@@ -322,8 +332,17 @@ function renderStempeln(){
     <div class="actions"><button class="btn" id="bAdd">+ Zeit nachtragen</button></div>
   </div>
   ${backupNag()}`;
+}
+function bindStempeln(r){
+  const g = id => document.getElementById(id);
+  if (g("bResume")) g("bResume").onclick = () => { const P = S.paused; S.paused = null;
+    S.entries.push({id:uid(), start:Date.now(), end:null, projectId:P.projectId, note:P.note||""}); save(); render(); };
+  if (g("bEnd")) g("bEnd").onclick = () => { S.paused = null; save(); render(); };
+  if (g("bPause")) g("bPause").onclick = () => { const now = Date.now(); r.end = now;
+    S.paused = {since:now, projectId:r.projectId, note:r.note||""}; save(); render(); };
   const st = document.getElementById("bStart");
   if (st) st.onclick = () => {
+    S.paused = null;
     const pid = document.getElementById("pSel").value || null;
     S.entries.push({id:uid(), start:Date.now(), end:null, projectId:pid, note:document.getElementById("pNote").value.trim()});
     S.lastProject = pid; save(); render();
@@ -337,7 +356,7 @@ function renderStempeln(){
   });
   const bn = document.getElementById("bNote");
   if (bn) bn.onclick = () => { const n = prompt("Notiz / Tätigkeit", r.note||""); if (n!==null){ r.note = n.trim(); save(); render(); } };
-  document.getElementById("bAdd").onclick = () => editEntry(null, todayKey());
+  if (g("bAdd")) g("bAdd").onclick = () => editEntry(null, todayKey());
   bindEntryClicks();
 }
 function entryLi(e){
@@ -667,8 +686,9 @@ function renderSettings(){
 
 /* ---------- Live-Uhr ---------- */
 setInterval(() => {
-  const r = running(); if (!r || tab !== "stempeln" || !S.settings.setupDone) return;
-  const c = document.getElementById("clock"); if (c) c.textContent = dur(Date.now() - r.start);
+  const r = running(); if (tab !== "stempeln" || !S.settings.setupDone) return;
+  const since = r ? r.start : (S.paused ? S.paused.since : null); if (!since) return;
+  const c = document.getElementById("clock"); if (c) c.textContent = dur(Date.now() - since);
   const k = document.getElementById("kIst"); if (k) k.textContent = hhmm(day(todayKey()).ist);
 }, 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { S = load(); IDX = null; render(); } });
