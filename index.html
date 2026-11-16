@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Zeiterfassung</title>
+<meta name="theme-color" content="#16324f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Zeiterfassung">
+<style>
+:root{
+  --ink:#16324f; --ink2:#4b6078; --line:#dfe4ea; --bg:#f4f6f8; --card:#fff;
+  --go:#1f8a5b; --stop:#c8413c; --warn:#b5651d; --hol:#fbe9e8; --abs:#e6f2ea; --we:#eef1f4;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--ink);color:#fff;padding:calc(10px + env(safe-area-inset-top)) 16px 0}
+header h1{margin:0 0 8px;font-size:17px;font-weight:700;letter-spacing:.2px}
+nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav button{flex:1;min-width:max-content;background:none;border:0;color:#c9d4e0;padding:10px 12px;font:inherit;font-weight:600;border-bottom:3px solid transparent;cursor:pointer}
+nav button.on{color:#fff;border-bottom-color:#fff}
+main{max-width:900px;margin:0 auto;padding:16px 14px calc(40px + env(safe-area-inset-bottom))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+h2{font-size:15px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink2)}
+label{display:block;font-size:13px;color:var(--ink2);margin:10px 0 4px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
+input[type=checkbox]{width:auto}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1;min-width:120px}
+button.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:#fff;color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer}
+button.pri{background:var(--ink);color:#fff;border-color:var(--ink)}
+button.danger{color:var(--stop)}
+button.small{padding:6px 10px;font-size:13px}
+.timer{font-size:52px;font-weight:700;font-variant-numeric:tabular-nums;text-align:center;margin:6px 0 2px;letter-spacing:-1px}
+.sub{color:var(--ink2);font-size:13px;text-align:center}
+.big{display:block;width:100%;font-size:20px;font-weight:700;padding:18px;border:0;border-radius:16px;color:#fff;margin-top:14px;cursor:pointer}
+.big.go{background:var(--go)}.big.stop{background:var(--stop)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpi{background:var(--bg);border-radius:12px;padding:10px;text-align:center}
+.kpi b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.kpi span{font-size:12px;color:var(--ink2)}
+.neg{color:var(--stop)} .pos{color:var(--go)}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.list li:last-child{border-bottom:0}
+.list .grow{flex:1;min-width:0}
+.muted{color:var(--ink2);font-size:13px}
+.tag{display:inline-block;font-size:12px;background:var(--bg);border-radius:20px;padding:2px 8px;margin-right:4px}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th{background:var(--ink);color:#fff;font-weight:600;padding:7px 6px;text-align:left;position:sticky;top:0}
+td{padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.n,th.n{text-align:right}
+tr.we td{background:var(--we);color:var(--ink2)} tr.hol td{background:var(--hol)} tr.abs td{background:var(--abs)}
+tr.today td{box-shadow:inset 0 2px 0 var(--ink),inset 0 -2px 0 var(--ink)}
+.warn{color:var(--warn);font-weight:600}
+.scroll{overflow-x:auto;margin:0 -16px;padding:0 16px}
+.monthbar{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.monthbar h3{flex:1;text-align:center;margin:0;font-size:18px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+dialog{border:0;border-radius:18px;padding:18px;width:min(460px,94vw);color:var(--ink)}
+dialog::backdrop{background:rgba(10,25,40,.45)}
+.hint{background:#fff7e8;border:1px solid #f0d9ae;border-radius:12px;padding:10px 12px;font-size:13px;margin-top:10px}
+.empty{color:var(--ink2);text-align:center;padding:16px 0}
+#report{display:none}
+@media print{
+  header,main{display:none!important}
+  #report{display:block;color:#000;font-size:11px}
+  #report table{font-size:10px} #report th{background:#ddd;color:#000}
+  #report h1{font-size:16px;margin:0 0 4px} #report h2{color:#000;margin:14px 0 6px}
+  @page{size:A4 landscape;margin:12mm}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>⏱ Zeiterfassung</h1>
+  <nav id="nav">
+    <button data-tab="stempeln">Stempeln</button>
+    <button data-tab="monat">Monat</button>
+    <button data-tab="projekte">Projekte</button>
+    <button data-tab="abwesenheit">Abwesenheit</button>
+    <button data-tab="einstellungen">Einstellungen</button>
+  </nav>
+</header>
+<main id="app"></main>
+<div id="report"></div>
+<dialog id="dlg"></dialog>
+
+<script src="xlsx.full.min.js" defer></script>
+<script>
+"use strict";
+/* ============================================================
+   Daten werden ausschließlich lokal im Browser gespeichert
+   (localStorage). Es gibt keinen Server und keine Übertragung.
+   ============================================================ */
+const KEY = "zeiterfassung.v1";
+const WD = ["Mo","Di","Mi","Do","Fr","Sa","So"];
+const MONTHS = ["Jänner","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const ABS_TYPES = ["Urlaub","Krankenstand","Zeitausgleich","Sonderurlaub","Pflegefreistellung","Arztbesuch","Berufsschule/Kurs"];
+
+let S = load();
+let tab = "stempeln";
+let viewY, viewM;
+{ const d = new Date(); viewY = d.getFullYear(); viewM = d.getMonth(); }
+
+function blank(){
+  return {
+    settings:{ name:"", soll:[8,8,8,8,7,0,0], eintritt:"", urlaub:25, urlaubRest:0, saldoStart:0, f2412:1, f3112:1, setupDone:false },
+    projects:[], entries:[], absences:[], extraDays:[], lastProject:null, lastBackup:null
+  };
+}
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.settings) return Object.assign(blank(), s); }catch(e){}
+  return blank();
+}
+let IDX = null;
+function save(){
+  IDX = null;
+  try{ localStorage.setItem(KEY, JSON.stringify(S)); }
+  catch(e){ alert("Speichern fehlgeschlagen: " + e.message); }
+}
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+
+/* ---------- Hilfen ---------- */
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const pad = n => String(n).padStart(2,"0");
+const dkey = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const fromKey = k => { const [y,m,d] = k.split("-").map(Number); return new Date(y,m-1,d); };
+const todayKey = () => dkey(new Date());
+const hm = ms => { const d = new Date(ms); return pad(d.getHours())+":"+pad(d.getMinutes()); };
+const fmtDate = k => { const d = fromKey(k); return pad(d.getDate())+"."+pad(d.getMonth()+1)+"."+d.getFullYear(); };
+const wdi = d => (d.getDay()+6)%7;
+const h2 = h => (Math.round(h*100)/100).toFixed(2).replace(".",",");
+const sgn = h => (h>0.004?"+":"") + h2(h);
+const dur = ms => { const s = Math.max(0,Math.floor(ms/1000)); return pad(Math.floor(s/3600))+":"+pad(Math.floor(s%3600/60))+":"+pad(s%60); };
+const hhmm = h => { const m = Math.round(h*60); const a = Math.abs(m); return (m<0?"-":"")+Math.floor(a/60)+":"+pad(a%60); };
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const proj = id => S.projects.find(p => p.id === id);
+const projName = id => (proj(id)||{}).name || "– ohne Projekt –";
+
+/* ---------- Feiertage Österreich ---------- */
+function easter(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+  h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+  mo=Math.floor((h+l-7*m+114)/31),da=(h+l-7*m+114)%31+1;
+  return new Date(y,mo-1,da);
+}
+const holCache = {};
+function holidays(y){
+  if (holCache[y]) return holCache[y];
+  const o = easter(y), add = (d,n)=>{ const x=new Date(d); x.setDate(x.getDate()+n); return x; };
+  const list = [
+    [new Date(y,0,1),"Neujahr"],[new Date(y,0,6),"Heilige Drei Könige"],[add(o,1),"Ostermontag"],
+    [new Date(y,4,1),"Staatsfeiertag"],[add(o,39),"Christi Himmelfahrt"],[add(o,50),"Pfingstmontag"],
+    [add(o,60),"Fronleichnam"],[new Date(y,7,15),"Mariä Himmelfahrt"],[new Date(y,9,26),"Nationalfeiertag"],
+    [new Date(y,10,1),"Allerheiligen"],[new Date(y,11,8),"Mariä Empfängnis"],[new Date(y,11,25),"Christtag"],
+    [new Date(y,11,26),"Stefanitag"]
+  ];
+  const map = {};
+  list.forEach(([d,n]) => map[dkey(d)] = {name:n, f:1});
+  return holCache[y] = map;
+}
+function holidayOf(k){
+  const y = +k.slice(0,4);
+  const h = holidays(y)[k]; if (h) return h;
+  const s = S.settings;
+  if (k.endsWith("-12-24") && +s.f2412 > 0) return {name:"Heiligabend", f:+s.f2412};
+  if (k.endsWith("-12-31") && +s.f3112 > 0) return {name:"Silvester", f:+s.f3112};
+  const x = S.extraDays.find(e => e.date === k);
+  if (x) return {name:x.name || "Freier Tag", f:+x.f || 1};
+  return null;
+}
+
+/* ---------- Tagesberechnung ---------- */
+function entriesOf(k){
+  if (!IDX){
+    IDX = {};
+    S.entries.forEach(e => { const kk = dkey(new Date(e.start)); (IDX[kk] = IDX[kk] || []).push(e); });
+    Object.values(IDX).forEach(a => a.sort((x,y)=>x.start-y.start));
+  }
+  return IDX[k] || [];
+}
+function absenceOf(k){
+  return S.absences.find(a => a.from <= k && (a.to || a.from) >= k) || null;
+}
+function day(k){
+  const d = fromKey(k), now = Date.now();
+  const es = entriesOf(k);
+  let ms = 0, first = null, last = null;
+  let pm = 0;
+  es.forEach(e => {
+    const end = e.end || now;
+    ms += net(e); pm += (+e.pauseMin||0);
+    first = first===null ? e.start : Math.min(first, e.start);
+    last = last===null ? end : Math.max(last, end);
+  });
+  const ist = ms/3.6e6;
+  const pause = es.length ? Math.max(0, (last-first)/3.6e6 - ist) : 0;
+  const s = S.settings;
+  const before = s.eintritt && k < s.eintritt;
+  const regel = before ? 0 : (+s.soll[wdi(d)] || 0);
+  const hol = holidayOf(k);
+  const soll = regel * (1 - (hol ? Math.min(1,hol.f) : 0));
+  let abs = soll > 0 ? absenceOf(k) : null;
+  const af = abs ? (+abs.factor || 1) : 0;
+  const gut = abs && abs.type !== "Zeitausgleich" ? soll * af : 0;
+  const counts = !before && (k < todayKey() || ist > 0 || abs);
+  const saldo = counts ? ist + gut - soll : 0;
+  const warn = [];
+  if (ist > 12) warn.push("über 12 h"); else if (ist > 10) warn.push("über 10 h");
+  if (ist > 6 && es.length && pause < 0.5) warn.push("Pause < 30 Min.");
+  return {k, d, es, ist, pause, first, last, regel, soll, hol, abs, af, gut, saldo, counts, before, warn};
+}
+function saldoUntil(k){
+  // kumulierter Saldo vom Eintritt (bzw. erster Buchung) bis inkl. Tag k
+  const s = S.settings;
+  let startK = s.eintritt;
+  if (!startK){
+    const firsts = S.entries.map(e=>e.start).concat(S.absences.map(a=>fromKey(a.from).getTime()));
+    if (!firsts.length) return +s.saldoStart || 0;
+    startK = dkey(new Date(Math.min(...firsts)));
+  }
+  let sum = +s.saldoStart || 0;
+  const d = fromKey(startK), end = fromKey(k);
+  while (d <= end){ sum += day(dkey(d)).saldo; d.setDate(d.getDate()+1); }
+  return sum;
+}
+function monthDays(y,m){
+  const out = [], d = new Date(y,m,1);
+  while (d.getMonth() === m){ out.push(day(dkey(d))); d.setDate(d.getDate()+1); }
+  return out;
+}
+function urlaubUsed(y){
+  let n = 0; const d = new Date(y,0,1);
+  while (d.getFullYear() === y){ const x = day(dkey(d)); if (x.abs && x.abs.type==="Urlaub") n += x.af; d.setDate(d.getDate()+1); }
+  return n;
+}
+const net = e => Math.max(0, (e.end||Date.now()) - e.start - (+e.pauseMin||0)*6e4);
+const running = () => S.entries.find(e => !e.end) || null;
+
+/* ---------- Render ---------- */
+const app = document.getElementById("app");
+document.getElementById("nav").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]"); if (!b) return;
+  tab = b.dataset.tab; render();
+});
+function render(){
+  document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  if (!S.settings.setupDone){ renderSetup(); return; }
+  ({stempeln:renderStempeln, monat:renderMonat, projekte:renderProjekte, abwesenheit:renderAbw, einstellungen:renderSettings})[tab]();
+}
+
+function projectOptions(sel){
+  const act = S.projects.filter(p => !p.archived);
+  return `<option value="">– ohne Projekt –</option>` + act.map(p => `<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(p.name)}</option>`).join("");
+}
+
+function renderSetup(){
+  const s = S.settings;
+  app.innerHTML = `
+  <div class="card">
+    <h2>Willkommen 👋</h2>
+    <p>Einmal kurz einrichten – danach nur noch Start und Stopp drücken. Alle Daten bleiben <b>nur auf diesem Gerät</b>.</p>
+    <label>Dein Name (für den Export)</label><input id="s_name" value="${esc(s.name)}">
+    <label>Eintrittsdatum (ab hier zählt die Soll-Zeit)</label><input id="s_ein" type="date" value="${esc(s.eintritt)}">
+    <label>Soll-Stunden pro Wochentag</label>
+    <div class="row">${WD.map((w,i)=>`<div><span class="muted">${w}</span><input type="number" step="0.25" min="0" data-soll="${i}" value="${s.soll[i]}"></div>`).join("")}</div>
+    <p class="muted" id="wsum"></p>
+    <div class="row">
+      <div><label>Urlaubsanspruch (Tage/Jahr)</label><input id="s_url" type="number" step="0.5" value="${s.urlaub}"></div>
+      <div><label>24.12. frei? (1 = ganz, 0,5 = halb, 0 = nein)</label><input id="s_24" type="number" step="0.5" min="0" max="1" value="${s.f2412}"></div>
+      <div><label>31.12. frei?</label><input id="s_31" type="number" step="0.5" min="0" max="1" value="${s.f3112}"></div>
+    </div>
+    <label>Erstes Projekt (weitere später unter „Projekte“)</label><input id="s_p" placeholder="z.B. Projektnummer + Name">
+    <button class="big go" id="s_go">Los geht's</button>
+  </div>`;
+  const ws = () => { const t = [...app.querySelectorAll("[data-soll]")].reduce((a,i)=>a+(+i.value||0),0);
+    document.getElementById("wsum").textContent = "Wochenstunden: " + h2(t); };
+  app.querySelectorAll("[data-soll]").forEach(i => i.oninput = ws); ws();
+  document.getElementById("s_go").onclick = () => {
+    const ein = document.getElementById("s_ein").value;
+    if (!ein){ alert("Bitte das Eintrittsdatum eintragen."); return; }
+    s.name = document.getElementById("s_name").value.trim();
+    s.eintritt = ein;
+    s.soll = [...app.querySelectorAll("[data-soll]")].map(i => +i.value || 0);
+    s.urlaub = +document.getElementById("s_url").value || 0;
+    s.f2412 = +document.getElementById("s_24").value || 0;
+    s.f3112 = +document.getElementById("s_31").value || 0;
+    const p = document.getElementById("s_p").value.trim();
+    if (p){ const id = uid(); S.projects.push({id, name:p, archived:false}); S.lastProject = id; }
+    s.setupDone = true; save(); render();
+  };
+}
+
+function renderStempeln(){
+  const r = running(), t = day(todayKey());
+  const cum = saldoUntil(todayKey());
+  app.innerHTML = `
+  <div class="card">
+    <div class="timer" id="clock">${r ? dur(Date.now()-r.start) : "00:00:00"}</div>
+    <div class="sub">${r ? "läuft seit "+hm(r.start)+" · "+esc(projName(r.projectId)) : "Nicht eingestempelt"}</div>
+    ${r ? `` : `<label>Projekt</label><select id="pSel">${projectOptions(S.lastProject)}</select>
+               <label>Notiz / Tätigkeit (optional)</label><input id="pNote" placeholder="z.B. Grundriss EG überarbeitet">`}
+    ${r ? `<button class="big stop" id="bStop">■ Stopp</button>
+           <div class="actions"><button class="btn" id="bSwitch">⇄ Projekt wechseln</button><button class="btn" id="bNote">✎ Notiz</button></div>`
+        : `<button class="big go" id="bStart">▶ Start</button>`}
+    <p class="muted" style="text-align:center;margin:10px 0 0">Pause: einfach Stopp drücken und danach wieder Start.</p>
+  </div>
+  <div class="card">
+    <h2>Heute</h2>
+    <div class="kpis">
+      <div class="kpi"><b id="kIst">${hhmm(t.ist)}</b><span>gearbeitet</span></div>
+      <div class="kpi"><b>${hhmm(t.soll)}</b><span>Soll</span></div>
+      <div class="kpi"><b class="${cum<0?"neg":"pos"}">${sgn(cum)}</b><span>Saldo gesamt (Std.)</span></div>
+    </div>
+    ${t.warn.length ? `<p class="warn">⚠ ${t.warn.join(" · ")}</p>` : ""}
+    ${t.hol ? `<p class="muted">🎉 ${esc(t.hol.name)}</p>` : ""}${t.abs ? `<p class="muted">🌴 ${esc(t.abs.type)}</p>` : ""}
+    <ul class="list">${t.es.map(entryLi).join("") || `<li class="empty">Noch keine Buchung heute.</li>`}</ul>
+    <div class="actions"><button class="btn" id="bAdd">+ Zeit nachtragen</button></div>
+  </div>
+  ${backupNag()}`;
+  const st = document.getElementById("bStart");
+  if (st) st.onclick = () => {
+    const pid = document.getElementById("pSel").value || null;
+    S.entries.push({id:uid(), start:Date.now(), end:null, projectId:pid, note:document.getElementById("pNote").value.trim()});
+    S.lastProject = pid; save(); render();
+  };
+  const sp = document.getElementById("bStop");
+  if (sp) sp.onclick = () => { r.end = Date.now(); save(); render(); };
+  const sw = document.getElementById("bSwitch");
+  if (sw) sw.onclick = () => pickProject("Neues Projekt", r.projectId, pid => {
+    const now = Date.now(); r.end = now;
+    S.entries.push({id:uid(), start:now, end:null, projectId:pid, note:""}); S.lastProject = pid; save(); render();
+  });
+  const bn = document.getElementById("bNote");
+  if (bn) bn.onclick = () => { const n = prompt("Notiz / Tätigkeit", r.note||""); if (n!==null){ r.note = n.trim(); save(); render(); } };
+  document.getElementById("bAdd").onclick = () => editEntry(null, todayKey());
+  bindEntryClicks();
+}
+function entryLi(e){
+  return `<li data-eid="${e.id}">
+    <div class="grow"><b>${hm(e.start)} – ${e.end ? hm(e.end) : "läuft"}</b> <span class="muted">· ${h2(net(e)/3.6e6)} h${+e.pauseMin?` (inkl. ${e.pauseMin} Min. Pause abgezogen)`:""}</span><br>
+    <span class="tag">${esc(projName(e.projectId))}</span><span class="muted">${esc(e.note)}</span></div>
+    <button class="btn small" data-edit="${e.id}">Bearbeiten</button></li>`;
+}
+function bindEntryClicks(){
+  app.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => editEntry(S.entries.find(e => e.id === b.dataset.edit)));
+}
+function backupNag(){
+  const last = S.lastBackup ? new Date(S.lastBackup) : null;
+  const days = last ? (Date.now()-last)/864e5 : 999;
+  if (days < 14 || !S.entries.length) return "";
+  return `<div class="hint">💾 Letzte Sicherung: ${last ? last.toLocaleDateString("de-AT") : "noch nie"}. Unter <b>Einstellungen → Sicherung herunterladen</b> eine Kopie speichern – sonst gehen die Daten beim Löschen des Browserverlaufs verloren.</div>`;
+}
+
+/* ---------- Dialoge ---------- */
+const dlg = document.getElementById("dlg");
+function pickProject(title, sel, cb){
+  dlg.innerHTML = `<h2>${esc(title)}</h2><select id="dp">${projectOptions(sel)}</select>
+    <div class="actions"><button class="btn pri" id="dok">OK</button><button class="btn" id="dx">Abbrechen</button></div>`;
+  dlg.showModal();
+  dlg.querySelector("#dx").onclick = () => dlg.close();
+  dlg.querySelector("#dok").onclick = () => { const v = dlg.querySelector("#dp").value || null; dlg.close(); cb(v); };
+}
+function editEntry(e, dateK){
+  const isNew = !e;
+  const k = e ? dkey(new Date(e.start)) : dateK;
+  dlg.innerHTML = `<h2>${isNew ? "Zeit nachtragen" : "Buchung bearbeiten"}</h2>
+    <label>Datum</label><input id="de_d" type="date" value="${k}">
+    <div class="row"><div><label>Beginn</label><input id="de_s" type="time" value="${e ? hm(e.start) : ""}"></div>
+    <div><label>Ende</label><input id="de_e" type="time" value="${e && e.end ? hm(e.end) : ""}"></div>
+    <div><label>Pause (Min.)</label><input id="de_pm" type="number" min="0" step="5" value="${e && e.pauseMin ? e.pauseMin : ""}"></div></div>
+    <label>Projekt</label><select id="de_p">${projectOptions(e ? e.projectId : S.lastProject)}</select>
+    <label>Notiz / Tätigkeit</label><input id="de_n" value="${esc(e ? e.note : "")}">
+    <div class="actions"><button class="btn pri" id="de_ok">Speichern</button><button class="btn" id="de_x">Abbrechen</button>
+    ${isNew ? "" : `<button class="btn danger" id="de_del">Löschen</button>`}</div>`;
+  dlg.showModal();
+  dlg.querySelector("#de_x").onclick = () => dlg.close();
+  const del = dlg.querySelector("#de_del");
+  if (del) del.onclick = () => { if (confirm("Buchung wirklich löschen?")){ S.entries = S.entries.filter(x => x !== e); save(); dlg.close(); render(); } };
+  dlg.querySelector("#de_ok").onclick = () => {
+    const d = dlg.querySelector("#de_d").value, s = dlg.querySelector("#de_s").value, en = dlg.querySelector("#de_e").value;
+    if (!d || !s){ alert("Datum und Beginn sind nötig."); return; }
+    const start = new Date(d+"T"+s).getTime();
+    let end = null;
+    if (en){ end = new Date(d+"T"+en).getTime(); if (end <= start) end += 864e5; }
+    else if (isNew || (e && e.end)){ alert("Bitte ein Ende eintragen."); return; }
+    if (end && end - start > 16*3.6e6 && !confirm("Mehr als 16 Stunden – stimmt das?")) return;
+    const pid = dlg.querySelector("#de_p").value || null, note = dlg.querySelector("#de_n").value.trim();
+    const pauseMin = Math.max(0, +dlg.querySelector("#de_pm").value || 0);
+    if (isNew) S.entries.push({id:uid(), start, end, projectId:pid, note, pauseMin});
+    else Object.assign(e, {start, end, projectId:pid, note, pauseMin});
+    save(); dlg.close(); render();
+  };
+}
+
+/* ---------- Monat ---------- */
+function monthData(y,m){
+  const days = monthDays(y,m);
+  const prevEnd = new Date(y,m,0);
+  const startSaldo = saldoUntil(dkey(prevEnd));
+  let cum = startSaldo;
+  days.forEach(x => { cum += x.saldo; x.cum = cum; });
+  const tot = days.reduce((a,x)=>({ist:a.ist+x.ist, soll:a.soll+x.soll, gut:a.gut+x.gut, saldo:a.saldo+x.saldo}), {ist:0,soll:0,gut:0,saldo:0});
+  const perProj = {};
+  days.forEach(x => x.es.forEach(e => { const h = net(e)/3.6e6; perProj[e.projectId||""] = (perProj[e.projectId||""]||0) + h; }));
+  return {days, startSaldo, endSaldo:cum, tot, perProj};
+}
+function statusText(x){
+  if (x.before) return "";
+  if (x.hol) return x.hol.name + (x.hol.f<1?" (½)":"");
+  if (x.abs) return x.abs.type + (x.af<1?" (½)":"");
+  return "";
+}
+function renderMonat(){
+  const md = monthData(viewY, viewM), tk = todayKey();
+  app.innerHTML = `
+  <div class="card">
+    <div class="monthbar"><button class="btn" id="mPrev">‹</button><h3>${MONTHS[viewM]} ${viewY}</h3><button class="btn" id="mNext">›</button></div>
+    <div class="kpis">
+      <div class="kpi"><b>${h2(md.tot.ist)}</b><span>Ist (Std.)</span></div>
+      <div class="kpi"><b>${h2(md.tot.soll)}</b><span>Soll (Std.)</span></div>
+      <div class="kpi"><b class="${md.endSaldo<0?"neg":"pos"}">${sgn(md.endSaldo)}</b><span>Saldo gesamt</span></div>
+    </div>
+    <p class="muted">Übertrag Vormonat: ${sgn(md.startSaldo)} · Saldo dieser Monat: ${sgn(md.tot.saldo)}</p>
+    <div class="actions">
+      <button class="btn pri" id="xX">⬇ Excel</button><button class="btn" id="xP">🖨 PDF / Drucken</button><button class="btn" id="xC">⬇ CSV</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Tage</h2>
+    <div class="scroll"><table>
+      <tr><th>Datum</th><th>Beginn</th><th>Ende</th><th class="n">Pause</th><th class="n">Ist</th><th class="n">Soll</th><th class="n">Saldo</th><th>Info</th></tr>
+      ${md.days.map(x => {
+        const cls = x.hol ? "hol" : x.abs ? "abs" : (x.regel===0 ? "we" : "");
+        return `<tr class="${cls} ${x.k===tk?"today":""}" data-day="${x.k}">
+          <td>${WD[wdi(x.d)]} ${pad(x.d.getDate())}.${pad(x.d.getMonth()+1)}.</td>
+          <td>${x.first!==null?hm(x.first):""}</td><td>${x.es.length?(x.es.some(e=>!e.end)?"läuft":hm(x.last)):""}</td>
+          <td class="n">${x.pause?hhmm(x.pause):""}</td><td class="n">${x.ist?h2(x.ist):""}</td>
+          <td class="n">${x.soll?h2(x.soll):""}</td><td class="n ${x.saldo<0?"neg":""}">${x.counts&&(x.soll||x.ist)?sgn(x.saldo):""}</td>
+          <td>${esc(statusText(x))} ${x.warn.length?`<span class="warn">⚠ ${x.warn.join(", ")}</span>`:""}</td></tr>`;
+      }).join("")}
+    </table></div>
+    <p class="muted">Tipp: Auf einen Tag tippen, um Buchungen zu sehen, zu ändern oder nachzutragen.</p>
+  </div>
+  <div class="card">
+    <h2>Stunden pro Projekt</h2>
+    <ul class="list">${Object.entries(md.perProj).sort((a,b)=>b[1]-a[1]).map(([id,h]) =>
+      `<li><div class="grow">${esc(projName(id||null))}</div><b>${h2(h)} h</b></li>`).join("") || `<li class="empty">Keine Buchungen in diesem Monat.</li>`}</ul>
+  </div>`;
+  document.getElementById("mPrev").onclick = () => { viewM--; if (viewM<0){viewM=11;viewY--;} render(); };
+  document.getElementById("mNext").onclick = () => { viewM++; if (viewM>11){viewM=0;viewY++;} render(); };
+  document.getElementById("xX").onclick = () => exportExcel(viewY, viewM);
+  document.getElementById("xC").onclick = () => exportCSV(viewY, viewM);
+  document.getElementById("xP").onclick = () => printMonth(viewY, viewM);
+  app.querySelectorAll("tr[data-day]").forEach(tr => tr.onclick = () => dayDialog(tr.dataset.day));
+}
+function dayDialog(k){
+  const x = day(k);
+  dlg.innerHTML = `<h2>${WD[wdi(x.d)]}, ${fmtDate(k)}</h2>
+    <ul class="list">${x.es.map(entryLi).join("") || `<li class="empty">Keine Buchungen.</li>`}</ul>
+    <div class="actions"><button class="btn pri" id="dd_add">+ Zeit nachtragen</button><button class="btn" id="dd_x">Schließen</button></div>`;
+  dlg.showModal();
+  dlg.querySelector("#dd_x").onclick = () => dlg.close();
+  dlg.querySelector("#dd_add").onclick = () => { dlg.close(); editEntry(null, k); };
+  dlg.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => { dlg.close(); editEntry(S.entries.find(e => e.id === b.dataset.edit)); });
+}
+
+/* ---------- Export ---------- */
+function fileBase(y,m){ return "Zeiterfassung_" + (S.settings.name ? S.settings.name.replace(/\s+/g,"_")+"_" : "") + y + "-" + pad(m+1); }
+function exportRows(y,m){
+  const md = monthData(y,m);
+  const days = [["Datum","Tag","Beginn","Ende","Pause (h:mm)","Ist (Std.)","Soll (Std.)","Saldo (Std.)","Saldo kumuliert","Info","Projekte"]];
+  md.days.forEach(x => {
+    const projs = [...new Set(x.es.map(e => projName(e.projectId)))].join(", ");
+    days.push([fmtDate(x.k), WD[wdi(x.d)], x.first!==null?hm(x.first):"", x.es.length&&x.last?hm(x.last):"",
+      x.pause?hhmm(x.pause):"", r2(x.ist), r2(x.soll), x.counts?r2(x.saldo):"", x.k<=todayKey()?r2(x.cum):"",
+      [statusText(x)].concat(x.warn).filter(Boolean).join(" · "), projs]);
+  });
+  days.push([]);
+  days.push(["Summe","","","","",r2(md.tot.ist),r2(md.tot.soll),r2(md.tot.saldo),"","",""]);
+  days.push(["Übertrag Vormonat","","","","","","",r2(md.startSaldo)]);
+  days.push(["Saldo gesamt","","","","","","",r2(md.endSaldo)]);
+  const pr = [["Projekt","Stunden"]];
+  Object.entries(md.perProj).sort((a,b)=>b[1]-a[1]).forEach(([id,h]) => pr.push([projName(id||null), r2(h)]));
+  pr.push(["Summe", r2(Object.values(md.perProj).reduce((a,b)=>a+b,0))]);
+  const bk = [["Datum","Beginn","Ende","Pause (Min.)","Dauer (Std.)","Projekt","Notiz / Tätigkeit"]];
+  md.days.forEach(x => x.es.forEach(e => bk.push([fmtDate(x.k), hm(e.start), e.end?hm(e.end):"läuft", (+e.pauseMin||0), r2(net(e)/3.6e6), projName(e.projectId), e.note||""])));
+  return {md, days, pr, bk};
+}
+const r2 = h => Math.round(h*100)/100;
+function exportExcel(y,m){
+  if (typeof XLSX === "undefined"){ alert("Excel-Modul lädt noch – bitte gleich nochmal versuchen."); return; }
+  const {days, pr, bk} = exportRows(y,m);
+  const wb = XLSX.utils.book_new();
+  const head = [[`Zeiterfassung ${MONTHS[m]} ${y}` + (S.settings.name ? " – " + S.settings.name : "")],[]];
+  const ws1 = XLSX.utils.aoa_to_sheet(head.concat(days));
+  ws1["!cols"] = [12,5,8,8,10,10,10,11,13,26,40].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws1, "Arbeitszeit");
+  const ws2 = XLSX.utils.aoa_to_sheet(pr); ws2["!cols"] = [{wch:40},{wch:10}];
+  XLSX.utils.book_append_sheet(wb, ws2, "Projekte");
+  const ws3 = XLSX.utils.aoa_to_sheet(bk); ws3["!cols"] = [12,8,8,11,12,30,50].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws3, "Buchungen");
+  XLSX.writeFile(wb, fileBase(y,m) + ".xlsx");
+}
+function exportCSV(y,m){
+  const {bk} = exportRows(y,m);
+  const csv = "﻿" + bk.map(r => r.map(v => `"${String(v).replace(/"/g,'""').replace(/^(\d+)\.(\d+)$/,"$1,$2")}"`).join(";")).join("\r\n");
+  download(new Blob([csv], {type:"text/csv"}), fileBase(y,m) + "_Buchungen.csv");
+}
+function download(blob, name){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function printMonth(y,m){
+  const {md, days, pr, bk} = exportRows(y,m);
+  const tbl = rows => `<table>${rows.map((r,i)=>`<tr>${r.map(v=>i===0?`<th>${esc(v)}</th>`:`<td>${esc(typeof v==="number"?h2(v):v)}</td>`).join("")}</tr>`).join("")}</table>`;
+  document.getElementById("report").innerHTML =
+    `<h1>Zeiterfassung ${MONTHS[m]} ${y}${S.settings.name ? " – " + esc(S.settings.name) : ""}</h1>
+     <div>Ist ${h2(md.tot.ist)} h · Soll ${h2(md.tot.soll)} h · Saldo Monat ${sgn(md.tot.saldo)} h · Saldo gesamt ${sgn(md.endSaldo)} h</div>
+     <h2>Arbeitszeit</h2>${tbl(days.filter(r=>r.length))}
+     <h2>Stunden pro Projekt</h2>${tbl(pr)}
+     <h2>Buchungen</h2>${tbl(bk)}
+     <p style="margin-top:24px">Datum / Unterschrift: ______________________________</p>`;
+  setTimeout(() => window.print(), 50);
+}
+
+/* ---------- Projekte ---------- */
+function renderProjekte(){
+  const hours = {};
+  S.entries.forEach(e => { hours[e.projectId||""] = (hours[e.projectId||""]||0) + net(e)/3.6e6; });
+  const act = S.projects.filter(p=>!p.archived), arc = S.projects.filter(p=>p.archived);
+  const li = p => `<li><div class="grow"><b>${esc(p.name)}</b><br><span class="muted">${h2(hours[p.id]||0)} h gesamt</span></div>
+     <button class="btn small" data-ren="${p.id}">Umbenennen</button>
+     <button class="btn small" data-arc="${p.id}">${p.archived?"Aktivieren":"Archivieren"}</button></li>`;
+  app.innerHTML = `
+  <div class="card">
+    <h2>Neues Projekt</h2>
+    <div class="row"><input id="np" placeholder="z.B. Projektnummer + Name"><button class="btn pri" id="npb" style="flex:0 0 auto">Anlegen</button></div>
+  </div>
+  <div class="card"><h2>Aktive Projekte</h2><ul class="list">${act.map(li).join("") || `<li class="empty">Noch keine Projekte.</li>`}</ul></div>
+  ${arc.length ? `<div class="card"><h2>Archiviert</h2><ul class="list">${arc.map(li).join("")}</ul></div>` : ""}`;
+  const add = () => { const n = document.getElementById("np").value.trim(); if (!n) return;
+    S.projects.push({id:uid(), name:n, archived:false}); save(); render(); };
+  document.getElementById("npb").onclick = add;
+  document.getElementById("np").onkeydown = e => { if (e.key==="Enter") add(); };
+  app.querySelectorAll("[data-ren]").forEach(b => b.onclick = () => { const p = proj(b.dataset.ren); const n = prompt("Neuer Name", p.name); if (n && n.trim()){ p.name = n.trim(); save(); render(); } });
+  app.querySelectorAll("[data-arc]").forEach(b => b.onclick = () => { const p = proj(b.dataset.arc); p.archived = !p.archived; save(); render(); });
+}
+
+/* ---------- Abwesenheit ---------- */
+function workdaysIn(a){
+  let n = 0; const d = fromKey(a.from), e = fromKey(a.to||a.from);
+  while (d <= e){ const x = day(dkey(d)); if (x.soll>0) n += (+a.factor||1); d.setDate(d.getDate()+1); }
+  return n;
+}
+function renderAbw(){
+  const y = new Date().getFullYear(), used = urlaubUsed(y), s = S.settings;
+  const list = [...S.absences].sort((a,b)=>b.from.localeCompare(a.from));
+  app.innerHTML = `
+  <div class="card">
+    <h2>Urlaub ${y}</h2>
+    <div class="kpis">
+      <div class="kpi"><b>${h2(+s.urlaub + (+s.urlaubRest||0)).replace(",00","")}</b><span>Anspruch</span></div>
+      <div class="kpi"><b>${String(used).replace(".",",")}</b><span>verbraucht</span></div>
+      <div class="kpi"><b>${String(r2(+s.urlaub + (+s.urlaubRest||0) - used)).replace(".",",")}</b><span>übrig</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Neue Abwesenheit</h2>
+    <div class="row"><div><label>Von</label><input id="a_f" type="date"></div><div><label>Bis</label><input id="a_t" type="date"></div></div>
+    <div class="row"><div><label>Art</label><select id="a_ty">${ABS_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div>
+    <div><label>Umfang</label><select id="a_fa"><option value="1">ganzer Tag</option><option value="0.5">halber Tag</option></select></div></div>
+    <p class="muted">Wochenenden und Feiertage im Zeitraum zählen automatisch nicht mit. Zeitausgleich wird vom Saldo abgezogen, alles andere wird mit der Soll-Zeit gutgeschrieben.</p>
+    <button class="btn pri" id="a_ok">Eintragen</button>
+  </div>
+  <div class="card"><h2>Eingetragen</h2><ul class="list">${list.map(a => `<li><div class="grow"><b>${esc(a.type)}</b>${+a.factor<1?" (½)":""}<br>
+    <span class="muted">${fmtDate(a.from)}${a.to&&a.to!==a.from?" – "+fmtDate(a.to):""} · ${String(workdaysIn(a)).replace(".",",")} Arbeitstag(e)</span></div>
+    <button class="btn small danger" data-adel="${a.id}">Löschen</button></li>`).join("") || `<li class="empty">Noch nichts eingetragen.</li>`}</ul></div>`;
+  document.getElementById("a_f").onchange = e => { const t = document.getElementById("a_t"); if (!t.value) t.value = e.target.value; };
+  document.getElementById("a_ok").onclick = () => {
+    const f = document.getElementById("a_f").value; let t = document.getElementById("a_t").value || f;
+    if (!f){ alert("Bitte ein Von-Datum wählen."); return; }
+    if (t < f){ alert("Bis-Datum liegt vor dem Von-Datum."); return; }
+    S.absences.push({id:uid(), from:f, to:t, type:document.getElementById("a_ty").value, factor:+document.getElementById("a_fa").value});
+    save(); render();
+  };
+  app.querySelectorAll("[data-adel]").forEach(b => b.onclick = () => { if (confirm("Eintrag löschen?")){ S.absences = S.absences.filter(a => a.id !== b.dataset.adel); save(); render(); } });
+}
+
+/* ---------- Einstellungen ---------- */
+function renderSettings(){
+  const s = S.settings;
+  app.innerHTML = `
+  <div class="card">
+    <h2>Arbeitszeit</h2>
+    <label>Name</label><input id="e_name" value="${esc(s.name)}">
+    <label>Eintrittsdatum</label><input id="e_ein" type="date" value="${esc(s.eintritt)}">
+    <label>Soll-Stunden pro Wochentag</label>
+    <div class="row">${WD.map((w,i)=>`<div><span class="muted">${w}</span><input type="number" step="0.25" min="0" data-soll="${i}" value="${s.soll[i]}"></div>`).join("")}</div>
+    <div class="row">
+      <div><label>Urlaubsanspruch (Tage/Jahr)</label><input id="e_url" type="number" step="0.5" value="${s.urlaub}"></div>
+      <div><label>Resturlaub Vorjahr (Tage)</label><input id="e_rest" type="number" step="0.5" value="${s.urlaubRest}"></div>
+      <div><label>Startsaldo (Std.)</label><input id="e_sal" type="number" step="0.25" value="${s.saldoStart}"></div>
+    </div>
+    <div class="row">
+      <div><label>24.12. frei (0 / 0,5 / 1)</label><input id="e_24" type="number" step="0.5" min="0" max="1" value="${s.f2412}"></div>
+      <div><label>31.12. frei (0 / 0,5 / 1)</label><input id="e_31" type="number" step="0.5" min="0" max="1" value="${s.f3112}"></div>
+    </div>
+    <div class="actions"><button class="btn pri" id="e_ok">Speichern</button></div>
+  </div>
+  <div class="card">
+    <h2>Zusätzliche freie Tage</h2>
+    <p class="muted">Gesetzliche Feiertage in Österreich sind automatisch drin. Hier z.B. Betriebsurlaub oder Fenstertage eintragen, die die Firma frei gibt.</p>
+    <div class="row"><input id="x_d" type="date"><input id="x_n" placeholder="Bezeichnung"><button class="btn" id="x_ok" style="flex:0 0 auto">+</button></div>
+    <ul class="list">${S.extraDays.map((x,i)=>`<li><div class="grow">${fmtDate(x.date)} · ${esc(x.name)}</div><button class="btn small danger" data-xdel="${i}">Löschen</button></li>`).join("")}</ul>
+  </div>
+  <div class="card">
+    <h2>Sicherung</h2>
+    <p class="muted">Alle Daten liegen nur auf diesem Gerät im Browser. Regelmäßig sichern – und mit „Wiederherstellen“ auf ein neues Gerät übertragen.</p>
+    <div class="actions"><button class="btn pri" id="b_dl">💾 Sicherung herunterladen</button>
+    <label class="btn" style="margin:0;display:inline-block;color:var(--ink)">📂 Wiederherstellen<input type="file" id="b_up" accept=".json,application/json" hidden></label></div>
+    <p class="muted">Letzte Sicherung: ${S.lastBackup ? new Date(S.lastBackup).toLocaleString("de-AT") : "noch nie"}</p>
+  </div>
+  <div class="card">
+    <h2>App auf den Startbildschirm</h2>
+    <p class="muted">iPhone: in Safari auf „Teilen“ → „Zum Home-Bildschirm“. Android: im Chrome-Menü (⋮) → „App installieren“ bzw. „Zum Startbildschirm hinzufügen“. Danach öffnet sie sich wie eine normale App, auch offline.</p>
+  </div>`;
+  document.getElementById("e_ok").onclick = () => {
+    s.name = document.getElementById("e_name").value.trim();
+    s.eintritt = document.getElementById("e_ein").value;
+    s.soll = [...app.querySelectorAll("[data-soll]")].map(i => +i.value || 0);
+    s.urlaub = +document.getElementById("e_url").value || 0;
+    s.urlaubRest = +document.getElementById("e_rest").value || 0;
+    s.saldoStart = +document.getElementById("e_sal").value || 0;
+    s.f2412 = +document.getElementById("e_24").value || 0;
+    s.f3112 = +document.getElementById("e_31").value || 0;
+    save(); alert("Gespeichert."); render();
+  };
+  document.getElementById("x_ok").onclick = () => {
+    const d = document.getElementById("x_d").value; if (!d) return;
+    S.extraDays.push({date:d, name:document.getElementById("x_n").value.trim()||"Freier Tag", f:1}); save(); render();
+  };
+  app.querySelectorAll("[data-xdel]").forEach(b => b.onclick = () => { S.extraDays.splice(+b.dataset.xdel,1); save(); render(); });
+  document.getElementById("b_dl").onclick = () => {
+    S.lastBackup = Date.now(); save();
+    download(new Blob([JSON.stringify(S,null,1)], {type:"application/json"}), "Zeiterfassung_Sicherung_" + todayKey() + ".json");
+    render();
+  };
+  document.getElementById("b_up").onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try{
+        const d = JSON.parse(r.result);
+        if (!d.settings || !Array.isArray(d.entries)) throw new Error("Keine gültige Sicherung");
+        if (!confirm("Alle aktuellen Daten auf diesem Gerät durch die Sicherung ersetzen?")) return;
+        S = Object.assign(blank(), d); IDX = null; save(); alert("Wiederhergestellt."); render();
+      }catch(err){ alert("Datei konnte nicht gelesen werden: " + err.message); }
+    };
+    r.readAsText(f);
+  };
+}
+
+/* ---------- Live-Uhr ---------- */
+setInterval(() => {
+  const r = running(); if (!r || tab !== "stempeln" || !S.settings.setupDone) return;
+  const c = document.getElementById("clock"); if (c) c.textContent = dur(Date.now() - r.start);
+  const k = document.getElementById("kIst"); if (k) k.textContent = hhmm(day(todayKey()).ist);
+}, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { S = load(); IDX = null; render(); } });
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+render();
+</script>
+</body>
+</html>
