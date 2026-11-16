@@ -329,7 +329,7 @@ function stempelRest(t, cum){
     ${t.warn.length ? `<p class="warn">⚠ ${t.warn.join(" · ")}</p>` : ""}
     ${t.hol ? `<p class="muted">🎉 ${esc(t.hol.name)}</p>` : ""}${t.abs ? `<p class="muted">🌴 ${esc(t.abs.type)}</p>` : ""}
     <ul class="list">${t.es.map(entryLi).join("") || `<li class="empty">Noch keine Buchung heute.</li>`}</ul>
-    <div class="actions"><button class="btn" id="bAdd">+ Zeit nachtragen</button></div>
+    <div class="actions"><button class="btn" id="bAdd">+ Zeit nachtragen</button>${t.es.length?`<button class="btn" id="bAddP">+ Pause eintragen</button>`:""}</div>
   </div>
   ${backupNag()}`;
 }
@@ -357,6 +357,13 @@ function bindStempeln(r){
   const bn = document.getElementById("bNote");
   if (bn) bn.onclick = () => { const n = prompt("Notiz / Tätigkeit", r.note||""); if (n!==null){ r.note = n.trim(); save(); render(); } };
   if (g("bAdd")) g("bAdd").onclick = () => editEntry(null, todayKey());
+  if (g("bAddP")) g("bAddP").onclick = () => {
+    const es = entriesOf(todayKey()); const e = es[es.length-1]; if (!e) return;
+    const v = prompt("Pause in Minuten (wird von heute abgezogen)", "30");
+    if (v === null) return; const m = Math.round(+String(v).replace(",", "."));
+    if (!(m > 0)){ alert("Bitte eine Zahl größer 0 eingeben."); return; }
+    e.pauseMin = (+e.pauseMin || 0) + m; save(); render();
+  };
   bindEntryClicks();
 }
 function entryLi(e){
