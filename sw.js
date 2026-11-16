@@ -1,5 +1,5 @@
 // Offline-Cache. Speichert nur die App-Dateien, keine persönlichen Daten.
-const CACHE = "zeiterfassung-v3";
+const CACHE = "zeiterfassung-v4";
 const FILES = ["./", "./index.html", "./xlsx.full.min.js", "./manifest.webmanifest", "./icon.svg", "./icon-192.png", "./icon-512.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener("activate", e => {
