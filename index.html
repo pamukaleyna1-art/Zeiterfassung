@@ -38,7 +38,7 @@ button.small{padding:6px 10px;font-size:13px}
 .sub{color:var(--ink2);font-size:13px;text-align:center}
 .big{display:block;width:100%;font-size:20px;font-weight:700;padding:18px;border:0;border-radius:16px;color:#fff;margin-top:14px;cursor:pointer}
 .big.go{background:var(--go)}.big.stop{background:var(--stop)}
-.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .kpi{background:var(--bg);border-radius:12px;padding:10px;text-align:center}
 .kpi b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
 .kpi span{font-size:12px;color:var(--ink2)}
@@ -250,6 +250,11 @@ function urlaubUsed(y){
   return n;
 }
 const net = e => Math.max(0, (e.end||Date.now()) - e.start - (+e.pauseMin||0)*6e4);
+function pauseToday(){
+  const t = day(todayKey()); let p = t.pause;
+  if (S.paused && dkey(new Date(S.paused.since)) === todayKey()) p += (Date.now() - S.paused.since)/3.6e6;
+  return p;
+}
 const running = () => S.entries.find(e => !e.end) || null;
 
 /* ---------- Render ---------- */
@@ -335,6 +340,7 @@ function stempelRest(t, cum){
     <h2>Heute</h2>
     <div class="kpis">
       <div class="kpi"><b id="kIst">${hhmm(t.ist)}</b><span>gearbeitet</span></div>
+      <div class="kpi"><b id="kPause" style="color:var(--warn)">${hhmm(pauseToday())}</b><span>Pause heute</span></div>
       <div class="kpi"><b>${hhmm(t.soll)}</b><span>Soll</span></div>
       <div class="kpi"><b class="${cum<0?"neg":"pos"}">${sgn(cum)}</b><span>Saldo gesamt (Std.)</span></div>
     </div>
@@ -744,6 +750,7 @@ setInterval(() => {
   const since = r ? r.start : (S.paused ? S.paused.since : null); if (!since) return;
   const c = document.getElementById("clock"); if (c) c.textContent = dur(Date.now() - since);
   const k = document.getElementById("kIst"); if (k) k.textContent = hhmm(day(todayKey()).ist);
+  const kp = document.getElementById("kPause"); if (kp) kp.textContent = hhmm(pauseToday());
 }, 1000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { S = load(); IDX = null; render(); } });
 
