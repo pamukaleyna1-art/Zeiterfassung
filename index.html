@@ -40,6 +40,7 @@ button.small{padding:6px 10px;font-size:13px}
 .big.go{background:var(--go)}.big.stop{background:var(--stop)}
 .kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 .kpi{background:var(--bg);border-radius:12px;padding:10px;text-align:center}
+.kpi:last-child:nth-child(odd){grid-column:1/-1}
 .kpi b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
 .kpi span{font-size:12px;color:var(--ink2)}
 .neg{color:var(--stop)} .pos{color:var(--go)}
@@ -65,6 +66,22 @@ dialog::backdrop{background:rgba(10,25,40,.45)}
 .hint{background:#fff7e8;border:1px solid #f0d9ae;border-radius:12px;padding:10px 12px;font-size:13px;margin-top:10px}
 .empty{color:var(--ink2);text-align:center;padding:16px 0}
 #report{display:none}
+.brand{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.brand img{height:30px;max-width:110px;object-fit:contain;background:#fff;border-radius:6px;padding:2px 4px}
+.brand .ico{font-size:22px}
+.brand b{display:block;font-size:16px;line-height:1.2}
+.brand small{display:block;font-size:12px;color:#c9d4e0}
+.card{box-shadow:0 1px 2px rgba(16,40,70,.04)}
+.lock{display:inline-block;font-size:12px;font-weight:600;color:var(--warn);background:var(--bg);border-radius:20px;padding:2px 8px}
+@media (prefers-color-scheme: dark){
+  :root{--ink:#e6edf5;--ink2:#9fb0c3;--line:#2a3646;--bg:#0f1720;--card:#16212d;--hol:#3a2224;--abs:#1d3326;--we:#1a2430}
+  header{background:#0b2238}
+  input,select,textarea,button.btn{background:#1b2836;color:var(--ink)}
+  button.pri{background:#2f6db0;border-color:#2f6db0;color:#fff}
+  th{background:#0b2238}
+  dialog{background:var(--card)}
+  .hint{background:#2e2615;border-color:#5a4724}
+}
 @media print{
   header,main{display:none!important}
   #report{display:block;color:#000;font-size:11px}
@@ -76,12 +93,13 @@ dialog::backdrop{background:rgba(10,25,40,.45)}
 </head>
 <body>
 <header>
-  <h1>⏱ Zeiterfassung</h1>
+  <div class="brand" id="brand"></div>
   <nav id="nav">
     <button data-tab="stempeln">Stempeln</button>
     <button data-tab="monat">Monat</button>
     <button data-tab="projekte">Projekte</button>
     <button data-tab="abwesenheit">Abwesenheit</button>
+    <button data-tab="fahrten">Fahrten</button>
     <button data-tab="einstellungen">Einstellungen</button>
   </nav>
 </header>
@@ -108,12 +126,12 @@ let viewY, viewM;
 
 function blank(){
   return {
-    settings:{ name:"", soll:[8,8,8,8,7,0,0], eintritt:"", urlaub:25, urlaubRest:0, saldoStart:0, f2412:1, f3112:1, setupDone:false },
-    projects:[], entries:[], absences:[], extraDays:[], lastProject:null, lastBackup:null, paused:null
+    settings:{ name:"", firma:"", logo:"", soll:[8,8,8,8,7,0,0], eintritt:"", urlaub:25, urlaubRest:0, urlaubByYear:{}, saldoStart:0, f2412:1, f3112:1, kmRate:0.5, locked:[], setupDone:false },
+    projects:[], entries:[], absences:[], extraDays:[], trips:[], lastProject:null, lastBackup:null, paused:null
   };
 }
 function load(){
-  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.settings) return Object.assign(blank(), s); }catch(e){}
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.settings){ const b = blank(); const o = Object.assign(b, s); o.settings = Object.assign(blank().settings, s.settings); return o; } }catch(e){}
   return blank();
 }
 let IDX = null;
@@ -139,7 +157,8 @@ const dur = ms => { const s = Math.max(0,Math.floor(ms/1000)); return pad(Math.f
 const hhmm = h => { const m = Math.round(h*60); const a = Math.abs(m); return (m<0?"-":"")+Math.floor(a/60)+":"+pad(a%60); };
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const proj = id => S.projects.find(p => p.id === id);
-const projName = id => (proj(id)||{}).name || "– ohne Projekt –";
+const projLabel = p => (p.nr ? p.nr + " – " : "") + p.name;
+const projName = id => { const p = proj(id); return p ? projLabel(p) : "– ohne Projekt –"; };
 const taskOf = (pid, tid) => { const p = proj(pid); return p && p.tasks ? p.tasks.find(t => t.id === tid) : null; };
 const taskName = (pid, tid) => (taskOf(pid, tid)||{}).name || "";
 const fullName = e => projName(e.projectId) + (taskName(e.projectId, e.taskId) ? " › " + taskName(e.projectId, e.taskId) : "");
@@ -255,6 +274,9 @@ function pauseToday(){
   if (S.paused && dkey(new Date(S.paused.since)) === todayKey()) p += (Date.now() - S.paused.since)/3.6e6;
   return p;
 }
+const mkey = k => k.slice(0,7);
+const isLocked = k => (S.settings.locked||[]).includes(mkey(k));
+function lockedMsg(k){ if (isLocked(k)){ alert("Der Monat " + MONTHS[+k.slice(5,7)-1] + " " + k.slice(0,4) + " ist abgeschlossen. Zum Ändern im Tab „Monat“ wieder öffnen."); return true; } return false; }
 const running = () => S.entries.find(e => !e.end) || null;
 
 /* ---------- Render ---------- */
@@ -265,13 +287,16 @@ document.getElementById("nav").addEventListener("click", e => {
 });
 function render(){
   document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  const st = S.settings;
+  document.getElementById("brand").innerHTML = (st.logo ? `<img src="${st.logo}" alt="">` : `<span class="ico">⏱</span>`) +
+    `<div><b>${esc(st.name || "Zeiterfassung")}</b><small>${esc(st.firma ? st.firma + " · Zeiterfassung" : (st.name ? "Zeiterfassung" : ""))}</small></div>`;
   if (!S.settings.setupDone){ renderSetup(); return; }
-  ({stempeln:renderStempeln, monat:renderMonat, projekte:renderProjekte, abwesenheit:renderAbw, einstellungen:renderSettings})[tab]();
+  ({stempeln:renderStempeln, monat:renderMonat, projekte:renderProjekte, abwesenheit:renderAbw, fahrten:renderFahrten, einstellungen:renderSettings})[tab]();
 }
 
 function projectOptions(sel){
   const act = S.projects.filter(p => !p.archived);
-  return `<option value="">– ohne Projekt –</option>` + act.map(p => `<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(p.name)}</option>`).join("");
+  return `<option value="">– ohne Projekt –</option>` + act.map(p => `<option value="${p.id}" ${p.id===sel?"selected":""}>${esc(projLabel(p))}</option>`).join("");
 }
 
 function renderSetup(){
@@ -279,8 +304,9 @@ function renderSetup(){
   app.innerHTML = `
   <div class="card">
     <h2>Willkommen 👋</h2>
-    <p>Einmal kurz einrichten – danach nur noch Start und Stopp drücken. Alle Daten bleiben <b>nur auf diesem Gerät</b>.</p>
-    <label>Dein Name (für den Export)</label><input id="s_name" value="${esc(s.name)}">
+    <p>Einmal kurz einrichten – danach nur noch Start und Stopp drücken.</p>
+    <div class="row"><div><label>Dein Name</label><input id="s_name" value="${esc(s.name)}"></div>
+    <div><label>Firma (optional)</label><input id="s_firma" value="${esc(s.firma)}"></div></div>
     <label>Eintrittsdatum (ab hier zählt die Soll-Zeit)</label><input id="s_ein" type="date" value="${esc(s.eintritt)}">
     <label>Soll-Stunden pro Wochentag</label>
     <div class="row">${WD.map((w,i)=>`<div><span class="muted">${w}</span><input type="number" step="0.25" min="0" data-soll="${i}" value="${s.soll[i]}"></div>`).join("")}</div>
@@ -300,6 +326,7 @@ function renderSetup(){
     const ein = document.getElementById("s_ein").value;
     if (!ein){ alert("Bitte das Eintrittsdatum eintragen."); return; }
     s.name = document.getElementById("s_name").value.trim();
+    s.firma = document.getElementById("s_firma").value.trim();
     s.eintritt = ein;
     s.soll = [...app.querySelectorAll("[data-soll]")].map(i => +i.value || 0);
     s.urlaub = +document.getElementById("s_url").value || 0;
@@ -328,6 +355,7 @@ function renderStempeln(){
     ${r ? `` : `<label>Projekt</label><select id="pSel">${projectOptions(S.lastProject)}</select>
                <label>Aufgabe</label><select id="tSel">${taskOptions(S.lastProject, S.lastTask)}</select>
                <label>Beschreibung (kann auch beim Beenden eingetragen werden)</label><input id="pNote" placeholder="z.B. Grundriss EG überarbeitet">`}
+    ${r && Date.now()-r.start > 10*3.6e6 ? `<div class="hint">⚠ Die Uhr läuft seit über 10 Stunden – vergessen auszustempeln? <button class="btn small" id="bFix">Ende korrigieren</button></div>` : ""}
     ${r ? `<div class="row" style="gap:10px"><button class="big" id="bPause" style="background:var(--warn)">⏸ Pause</button><button class="big stop" id="bStop">■ Feierabend</button></div>
            <div class="actions"><button class="btn" id="bSwitch">⇄ Projekt wechseln</button><button class="btn" id="bNote">✎ Beschreibung</button></div>`
         : `<button class="big go" id="bStart">▶ Start</button>`}
@@ -360,6 +388,7 @@ function bindStempeln(r){
     askDesc(r, "Pause – was hast du bis jetzt gemacht?", () => { r.end = now;
       S.paused = {since:now, projectId:r.projectId, taskId:r.taskId||null, note:r.note||""}; save(); render(); }); };
   if (g("pSel")) linkSelects(app, "#pSel", "#tSel");
+  if (g("bFix")) g("bFix").onclick = () => editEntry(r);
   const st = document.getElementById("bStart");
   if (st) st.onclick = () => {
     S.paused = null;
@@ -378,7 +407,7 @@ function bindStempeln(r){
   if (bn) bn.onclick = () => askDesc(r, "Beschreibung", () => { save(); render(); }, true);
   if (g("bAdd")) g("bAdd").onclick = () => editEntry(null, todayKey());
   if (g("bAddP")) g("bAddP").onclick = () => {
-    const es = entriesOf(todayKey()); const e = es[es.length-1]; if (!e) return;
+    const es = entriesOf(todayKey()); const e = es[es.length-1]; if (!e || lockedMsg(todayKey())) return;
     const v = prompt("Pause in Minuten (wird von heute abgezogen)", "30");
     if (v === null) return; const m = Math.round(+String(v).replace(",", "."));
     if (!(m > 0)){ alert("Bitte eine Zahl größer 0 eingeben."); return; }
@@ -425,6 +454,7 @@ function askDesc(e, title, cb, always){
 function editEntry(e, dateK){
   const isNew = !e;
   const k = e ? dkey(new Date(e.start)) : dateK;
+  if (lockedMsg(k)) return;
   dlg.innerHTML = `<h2>${isNew ? "Zeit nachtragen" : "Buchung bearbeiten"}</h2>
     <label>Datum</label><input id="de_d" type="date" value="${k}">
     <div class="row"><div><label>Beginn</label><input id="de_s" type="time" value="${e ? hm(e.start) : ""}"></div>
@@ -442,6 +472,7 @@ function editEntry(e, dateK){
   dlg.querySelector("#de_ok").onclick = () => {
     const d = dlg.querySelector("#de_d").value, s = dlg.querySelector("#de_s").value, en = dlg.querySelector("#de_e").value;
     if (!d || !s){ alert("Datum und Beginn sind nötig."); return; }
+    if (lockedMsg(d)) return;
     const start = new Date(d+"T"+s).getTime();
     let end = null;
     if (en){ end = new Date(d+"T"+en).getTime(); if (end <= start) end += 864e5; }
@@ -476,10 +507,10 @@ function statusText(x){
   return "";
 }
 function renderMonat(){
-  const md = monthData(viewY, viewM), tk = todayKey();
+  const md = monthData(viewY, viewM), tk = todayKey(), mk = viewY + "-" + pad(viewM+1), locked = (S.settings.locked||[]).includes(mk);
   app.innerHTML = `
   <div class="card">
-    <div class="monthbar"><button class="btn" id="mPrev">‹</button><h3>${MONTHS[viewM]} ${viewY}</h3><button class="btn" id="mNext">›</button></div>
+    <div class="monthbar"><button class="btn" id="mPrev">‹</button><h3>${MONTHS[viewM]} ${viewY} ${locked?'<span class="lock">🔒 abgeschlossen</span>':""}</h3><button class="btn" id="mNext">›</button></div>
     <div class="kpis">
       <div class="kpi"><b>${h2(md.tot.ist)}</b><span>Ist (Std.)</span></div>
       <div class="kpi"><b>${h2(md.tot.soll)}</b><span>Soll (Std.)</span></div>
@@ -487,8 +518,10 @@ function renderMonat(){
     </div>
     <p class="muted">Übertrag Vormonat: ${sgn(md.startSaldo)} · Saldo dieser Monat: ${sgn(md.tot.saldo)}</p>
     <div class="actions">
-      <button class="btn pri" id="xX">⬇ Excel</button><button class="btn" id="xP">🖨 PDF / Drucken</button><button class="btn" id="xC">⬇ CSV</button>
+      <button class="btn pri" id="xS">📤 Teilen (Excel)</button><button class="btn" id="xX">⬇ Excel</button><button class="btn" id="xP">🖨 PDF / Drucken</button><button class="btn" id="xC">⬇ CSV</button>
     </div>
+    <div class="actions"><button class="btn" id="xL">${locked ? "🔓 Monat wieder öffnen" : "🔒 Monat abschließen"}</button></div>
+    <p class="muted">${locked ? "Abgeschlossen: Buchungen und Abwesenheiten in diesem Monat können nicht mehr geändert werden." : "Tipp: Nach dem Einreichen abschließen, damit nichts mehr versehentlich geändert wird."}</p>
   </div>
   <div class="card">
     <h2>Tage</h2>
@@ -516,6 +549,13 @@ function renderMonat(){
   document.getElementById("mPrev").onclick = () => { viewM--; if (viewM<0){viewM=11;viewY--;} render(); };
   document.getElementById("mNext").onclick = () => { viewM++; if (viewM>11){viewM=0;viewY++;} render(); };
   document.getElementById("xX").onclick = () => exportExcel(viewY, viewM);
+  document.getElementById("xS").onclick = () => exportExcel(viewY, viewM, true);
+  document.getElementById("xL").onclick = () => {
+    const L = S.settings.locked = S.settings.locked || [];
+    if (locked){ if (!confirm("Monat wieder zum Bearbeiten öffnen?")) return; S.settings.locked = L.filter(x => x !== mk); }
+    else { if (running() && mkey(dkey(new Date(running().start))) === mk){ alert("Bitte zuerst ausstempeln."); return; }
+      if (!confirm(MONTHS[viewM] + " " + viewY + " abschließen?")) return; L.push(mk); }
+    save(); render(); };
   document.getElementById("xC").onclick = () => exportCSV(viewY, viewM);
   document.getElementById("xP").onclick = () => printMonth(viewY, viewM);
   app.querySelectorAll("tr[data-day]").forEach(tr => tr.onclick = () => dayDialog(tr.dataset.day));
@@ -546,30 +586,43 @@ function exportRows(y,m){
   days.push(["Summe","","","","",r2(md.tot.ist),r2(md.tot.soll),r2(md.tot.saldo),"","",""]);
   days.push(["Übertrag Vormonat","","","","","","",r2(md.startSaldo)]);
   days.push(["Saldo gesamt","","","","","","",r2(md.endSaldo)]);
-  const pr = [["Projekt","Aufgabe","Stunden"]];
+  const pr = [["Projekt","Kunde / Bauherr","Aufgabe","Stunden"]];
   Object.entries(md.perProj).sort((a,b)=>b[1]-a[1]).forEach(([id,h]) => {
-    Object.entries(md.perTask[id]||{}).sort((a,b)=>b[1]-a[1]).forEach(([t,th]) => pr.push([projName(id||null), t ? taskName(id||null,t) : "– ohne Aufgabe –", r2(th)]));
-    pr.push([projName(id||null) + " gesamt", "", r2(h)]);
+    const kd = (proj(id||null)||{}).kunde || "";
+    Object.entries(md.perTask[id]||{}).sort((a,b)=>b[1]-a[1]).forEach(([t,th]) => pr.push([projName(id||null), kd, t ? taskName(id||null,t) : "– ohne Aufgabe –", r2(th)]));
+    pr.push([projName(id||null) + " gesamt", "", "", r2(h)]);
   });
-  pr.push(["Summe", "", r2(Object.values(md.perProj).reduce((a,b)=>a+b,0))]);
+  pr.push(["Summe", "", "", r2(Object.values(md.perProj).reduce((a,b)=>a+b,0))]);
   const bk = [["Datum","Beginn","Ende","Pause (Min.)","Dauer (Std.)","Projekt","Aufgabe","Beschreibung"]];
   md.days.forEach(x => x.es.forEach(e => bk.push([fmtDate(x.k), hm(e.start), e.end?hm(e.end):"läuft", (+e.pauseMin||0), r2(net(e)/3.6e6), projName(e.projectId), taskName(e.projectId, e.taskId), e.note||""])));
   return {md, days, pr, bk};
 }
 const r2 = h => Math.round(h*100)/100;
-function exportExcel(y,m){
+async function exportExcel(y,m,share){
   if (typeof XLSX === "undefined"){ alert("Excel-Modul lädt noch – bitte gleich nochmal versuchen."); return; }
   const {days, pr, bk} = exportRows(y,m);
   const wb = XLSX.utils.book_new();
-  const head = [[`Zeiterfassung ${MONTHS[m]} ${y}` + (S.settings.name ? " – " + S.settings.name : "")],[]];
+  const head = [[`Zeiterfassung ${MONTHS[m]} ${y}` + (S.settings.name ? " – " + S.settings.name : "") + (S.settings.firma ? " · " + S.settings.firma : "")],[]];
   const ws1 = XLSX.utils.aoa_to_sheet(head.concat(days));
   ws1["!cols"] = [12,5,8,8,10,10,10,11,13,26,40].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb, ws1, "Arbeitszeit");
-  const ws2 = XLSX.utils.aoa_to_sheet(pr); ws2["!cols"] = [{wch:36},{wch:28},{wch:10}];
+  const ws2 = XLSX.utils.aoa_to_sheet(pr); ws2["!cols"] = [{wch:36},{wch:24},{wch:28},{wch:10}];
   XLSX.utils.book_append_sheet(wb, ws2, "Projekte");
   const ws3 = XLSX.utils.aoa_to_sheet(bk); ws3["!cols"] = [12,8,8,11,12,28,24,60].map(w=>({wch:w}));
   XLSX.utils.book_append_sheet(wb, ws3, "Buchungen");
-  XLSX.writeFile(wb, fileBase(y,m) + ".xlsx");
+  const tr = tripRows(y,m);
+  if (tr.length > 1){ const ws4 = XLSX.utils.aoa_to_sheet(tr); ws4["!cols"] = [12,22,22,8,28,30,10].map(w=>({wch:w})); XLSX.utils.book_append_sheet(wb, ws4, "Fahrten"); }
+  const name = fileBase(y,m) + ".xlsx";
+  if (share){
+    const blob = new Blob([XLSX.write(wb, {type:"array", bookType:"xlsx"})], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const file = new File([blob], name, {type:blob.type});
+    if (navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], title:"Zeiterfassung " + MONTHS[m] + " " + y}); }catch(e){}
+      return;
+    }
+    download(blob, name); return;
+  }
+  XLSX.writeFile(wb, name);
 }
 function exportCSV(y,m){
   const {bk} = exportRows(y,m);
@@ -583,12 +636,16 @@ function download(blob, name){
 function printMonth(y,m){
   const {md, days, pr, bk} = exportRows(y,m);
   const tbl = rows => `<table>${rows.map((r,i)=>`<tr>${r.map(v=>i===0?`<th>${esc(v)}</th>`:`<td>${esc(typeof v==="number"?h2(v):v)}</td>`).join("")}</tr>`).join("")}</table>`;
+  const tr = tripRows(y,m);
   document.getElementById("report").innerHTML =
-    `<h1>Zeiterfassung ${MONTHS[m]} ${y}${S.settings.name ? " – " + esc(S.settings.name) : ""}</h1>
+    `${S.settings.logo ? `<img src="${S.settings.logo}" style="height:36px;float:right">` : ""}
+     <h1>Zeiterfassung ${MONTHS[m]} ${y}${S.settings.name ? " – " + esc(S.settings.name) : ""}</h1>
+     ${S.settings.firma ? `<div>${esc(S.settings.firma)}</div>` : ""}
      <div>Ist ${h2(md.tot.ist)} h · Soll ${h2(md.tot.soll)} h · Saldo Monat ${sgn(md.tot.saldo)} h · Saldo gesamt ${sgn(md.endSaldo)} h</div>
      <h2>Arbeitszeit</h2>${tbl(days.filter(r=>r.length))}
      <h2>Stunden pro Projekt</h2>${tbl(pr)}
      <h2>Buchungen</h2>${tbl(bk)}
+     ${tr.length > 1 ? `<h2>Fahrten</h2>${tbl(tr)}` : ""}
      <p style="margin-top:24px">Datum / Unterschrift: ______________________________</p>`;
   setTimeout(() => window.print(), 50);
 }
@@ -601,8 +658,8 @@ function renderProjekte(){
   const act = S.projects.filter(p=>!p.archived), arc = S.projects.filter(p=>p.archived);
   const card = p => { const ts = p.tasks || [];
     return `<div class="card">
-    <div style="display:flex;align-items:center;gap:8px"><div class="grow" style="flex:1"><b style="font-size:16px">${esc(p.name)}</b><br><span class="muted">${h2(hours[p.id]||0)} h gesamt</span></div>
-      <button class="btn small" data-ren="${p.id}">Umbenennen</button><button class="btn small" data-arc="${p.id}">${p.archived?"Aktivieren":"Archivieren"}</button></div>
+    <div style="display:flex;align-items:center;gap:8px"><div class="grow" style="flex:1"><b style="font-size:16px">${esc(projLabel(p))}</b><br><span class="muted">${p.kunde ? esc(p.kunde) + " · " : ""}${h2(hours[p.id]||0)} h gesamt</span></div>
+      <button class="btn small" data-ren="${p.id}">Bearbeiten</button><button class="btn small" data-arc="${p.id}">${p.archived?"Aktivieren":"Archivieren"}</button></div>
     ${p.archived ? "" : `<ul class="list" style="margin-top:6px">${ts.map(t => `<li style="${t.archived?"opacity:.5":""}"><div class="grow">↳ ${esc(t.name)} <span class="muted">· ${h2(th[t.id]||0)} h</span></div>
         <button class="btn small" data-tren="${p.id}|${t.id}">✎</button><button class="btn small" data-tarc="${p.id}|${t.id}">${t.archived?"Aktivieren":"Archiv"}</button></li>`).join("")}</ul>
       <div class="row" style="margin-top:8px"><input data-tnew="${p.id}" placeholder="Neue Aufgabe, z.B. Grundriss planen"><button class="btn" data-tadd="${p.id}" style="flex:0 0 auto">+ Aufgabe</button></div>`}
@@ -610,20 +667,29 @@ function renderProjekte(){
   app.innerHTML = `
   <div class="card">
     <h2>Neues Projekt</h2>
-    <div class="row"><input id="np" placeholder="z.B. Projektnummer + Name"><button class="btn pri" id="npb" style="flex:0 0 auto">Anlegen</button></div>
+    <div class="row"><div style="flex:0 0 110px;min-width:90px"><label>Projekt-Nr.</label><input id="npn" placeholder="z.B. 2611"></div>
+      <div><label>Projektname</label><input id="np" placeholder="z.B. Wohnanlage Hallein"></div></div>
+    <label>Kunde / Bauherr (optional)</label><input id="npk">
+    <div class="actions"><button class="btn pri" id="npb">Anlegen</button></div>
     <p class="muted">Pro Projekt kannst du Aufgaben anlegen (z.B. Grundriss planen, Wände planen, Böden, Räume). Beim Stempeln wählst du dann Projekt + Aufgabe.</p>
   </div>
   ${act.map(card).join("") || `<div class="card empty">Noch keine Projekte.</div>`}
   ${arc.length ? `<h2 style="margin:20px 4px 10px">Archiviert</h2>${arc.map(card).join("")}` : ""}`;
-  const add = () => { const n = document.getElementById("np").value.trim(); if (!n) return;
-    S.projects.push({id:uid(), name:n, archived:false, tasks:[]}); save(); render(); };
+  const add = () => { const n = document.getElementById("np").value.trim(); if (!n){ alert("Bitte einen Projektnamen eingeben."); return; }
+    S.projects.push({id:uid(), name:n, nr:document.getElementById("npn").value.trim(), kunde:document.getElementById("npk").value.trim(), archived:false, tasks:[]}); save(); render(); };
   document.getElementById("npb").onclick = add;
   document.getElementById("np").onkeydown = e => { if (e.key==="Enter") add(); };
   const addTask = pid => { const i = app.querySelector(`[data-tnew="${pid}"]`), n = i.value.trim(); if (!n) return;
     const p = proj(pid); (p.tasks = p.tasks || []).push({id:uid(), name:n, archived:false}); save(); render(); };
   app.querySelectorAll("[data-tadd]").forEach(b => b.onclick = () => addTask(b.dataset.tadd));
   app.querySelectorAll("[data-tnew]").forEach(i => i.onkeydown = e => { if (e.key==="Enter") addTask(i.dataset.tnew); });
-  app.querySelectorAll("[data-ren]").forEach(b => b.onclick = () => { const p = proj(b.dataset.ren); const n = prompt("Neuer Name", p.name); if (n && n.trim()){ p.name = n.trim(); save(); render(); } });
+  app.querySelectorAll("[data-ren]").forEach(b => b.onclick = () => { const p = proj(b.dataset.ren);
+    dlg.innerHTML = `<h2>Projekt bearbeiten</h2><label>Projekt-Nr.</label><input id="pe_nr" value="${esc(p.nr||"")}">
+      <label>Projektname</label><input id="pe_n" value="${esc(p.name)}"><label>Kunde / Bauherr</label><input id="pe_k" value="${esc(p.kunde||"")}">
+      <div class="actions"><button class="btn pri" id="pe_ok">Speichern</button><button class="btn" id="pe_x">Abbrechen</button></div>`;
+    dlg.showModal(); dlg.querySelector("#pe_x").onclick = () => dlg.close();
+    dlg.querySelector("#pe_ok").onclick = () => { const n = dlg.querySelector("#pe_n").value.trim(); if (!n) return;
+      Object.assign(p, {name:n, nr:dlg.querySelector("#pe_nr").value.trim(), kunde:dlg.querySelector("#pe_k").value.trim()}); save(); dlg.close(); render(); }; });
   app.querySelectorAll("[data-arc]").forEach(b => b.onclick = () => { const p = proj(b.dataset.arc); p.archived = !p.archived; save(); render(); });
   app.querySelectorAll("[data-tren]").forEach(b => b.onclick = () => { const [pid,tid] = b.dataset.tren.split("|"), t = taskOf(pid,tid);
     const n = prompt("Neuer Name", t.name); if (n && n.trim()){ t.name = n.trim(); save(); render(); } });
@@ -631,43 +697,121 @@ function renderProjekte(){
 }
 
 /* ---------- Abwesenheit ---------- */
-function workdaysIn(a){
+function workdaysIn(a, y){
   let n = 0; const d = fromKey(a.from), e = fromKey(a.to||a.from);
-  while (d <= e){ const x = day(dkey(d)); if (x.soll>0) n += (+a.factor||1); d.setDate(d.getDate()+1); }
+  while (d <= e){ const x = day(dkey(d)); if (x.soll>0 && (!y || d.getFullYear() === y)) n += (+a.factor||1); d.setDate(d.getDate()+1); }
   return n;
 }
+let abwY = new Date().getFullYear();
+const anspruch = y => { const v = (S.settings.urlaubByYear||{})[y]; return v === undefined || v === "" ? +S.settings.urlaub || 0 : +v; };
+const firstYear = () => S.settings.eintritt ? +S.settings.eintritt.slice(0,4) : new Date().getFullYear();
+function urlaubKonto(y){
+  // Übertrag aus dem Vorjahr wird automatisch weitergerechnet
+  if (y < firstYear()) return {anspruch:0, uebertrag:0, used:0, rest:0};
+  const uebertrag = y === firstYear() ? (+S.settings.urlaubRest || 0) : urlaubKonto(y-1).rest;
+  const a = anspruch(y), used = urlaubUsed(y);
+  return {anspruch:a, uebertrag, used, rest:r2(a + uebertrag - used)};
+}
+const dez = v => String(r2(v)).replace(".", ",");
+function avgDay(){ const w = S.settings.soll.filter(h => h > 0); return w.length ? w.reduce((a,b)=>a+b,0)/w.length : 8; }
 function renderAbw(){
-  const y = new Date().getFullYear(), used = urlaubUsed(y), s = S.settings;
-  const list = [...S.absences].sort((a,b)=>b.from.localeCompare(a.from));
+  const y = abwY, k = urlaubKonto(y);
+  const saldo = saldoUntil(todayKey());
+  const list = [...S.absences].filter(a => a.from.slice(0,4) == y || (a.to||a.from).slice(0,4) == y).sort((a,b)=>b.from.localeCompare(a.from));
+  const byType = {}; list.forEach(a => byType[a.type] = (byType[a.type]||0) + workdaysIn(a, y));
   app.innerHTML = `
   <div class="card">
-    <h2>Urlaub ${y}</h2>
+    <div class="monthbar"><button class="btn" id="yPrev">‹</button><h3>Urlaub ${y}</h3><button class="btn" id="yNext">›</button></div>
     <div class="kpis">
-      <div class="kpi"><b>${h2(+s.urlaub + (+s.urlaubRest||0)).replace(",00","")}</b><span>Anspruch</span></div>
-      <div class="kpi"><b>${String(used).replace(".",",")}</b><span>verbraucht</span></div>
-      <div class="kpi"><b>${String(r2(+s.urlaub + (+s.urlaubRest||0) - used)).replace(".",",")}</b><span>übrig</span></div>
+      <div class="kpi"><b>${dez(k.anspruch)}</b><span>Anspruch ${y}</span></div>
+      <div class="kpi"><b>${dez(k.uebertrag)}</b><span>Übertrag Vorjahr</span></div>
+      <div class="kpi"><b>${dez(k.used)}</b><span>verbraucht</span></div>
+      <div class="kpi"><b class="${k.rest<0?"neg":"pos"}">${dez(k.rest)}</b><span>übrig</span></div>
     </div>
+    <div class="row" style="align-items:flex-end;margin-top:6px"><div><label>Urlaubsanspruch ${y} (Tage)</label><input id="u_y" type="number" step="0.5" value="${anspruch(y)}"></div>
+      <button class="btn" id="u_ok" style="flex:0 0 auto">Speichern</button></div>
+    <p class="muted">Der Resturlaub wird automatisch ins nächste Jahr übertragen. Im ersten Jahr ist der Anspruch oft anteilig – dann hier den richtigen Wert eintragen.</p>
+  </div>
+  <div class="card">
+    <h2>Zeitausgleich</h2>
+    <div class="kpis"><div class="kpi"><b class="${saldo<0?"neg":"pos"}">${sgn(saldo)}</b><span>Zeitsaldo (Std.)</span></div>
+      <div class="kpi"><b>${saldo > 0 ? dez(Math.floor(saldo/avgDay()*2)/2) : "0"}</b><span>≈ freie Tage möglich</span></div></div>
+    <p class="muted">Plus-Stunden kann er als „Zeitausgleich“ eintragen – die werden dann vom Saldo abgebaut.</p>
   </div>
   <div class="card">
     <h2>Neue Abwesenheit</h2>
     <div class="row"><div><label>Von</label><input id="a_f" type="date"></div><div><label>Bis</label><input id="a_t" type="date"></div></div>
     <div class="row"><div><label>Art</label><select id="a_ty">${ABS_TYPES.map(t=>`<option>${t}</option>`).join("")}</select></div>
     <div><label>Umfang</label><select id="a_fa"><option value="1">ganzer Tag</option><option value="0.5">halber Tag</option></select></div></div>
-    <p class="muted">Wochenenden und Feiertage im Zeitraum zählen automatisch nicht mit. Zeitausgleich wird vom Saldo abgezogen, alles andere wird mit der Soll-Zeit gutgeschrieben.</p>
+    <p class="muted">Wochenenden und Feiertage zählen automatisch nicht mit – auch über den Jahreswechsel.</p>
     <button class="btn pri" id="a_ok">Eintragen</button>
   </div>
-  <div class="card"><h2>Eingetragen</h2><ul class="list">${list.map(a => `<li><div class="grow"><b>${esc(a.type)}</b>${+a.factor<1?" (½)":""}<br>
-    <span class="muted">${fmtDate(a.from)}${a.to&&a.to!==a.from?" – "+fmtDate(a.to):""} · ${String(workdaysIn(a)).replace(".",",")} Arbeitstag(e)</span></div>
-    <button class="btn small danger" data-adel="${a.id}">Löschen</button></li>`).join("") || `<li class="empty">Noch nichts eingetragen.</li>`}</ul></div>`;
+  <div class="card"><h2>Eingetragen ${y}</h2>
+    ${Object.keys(byType).length ? `<p class="muted">${Object.entries(byType).map(([t,n]) => esc(t) + ": " + dez(n) + " Tg.").join(" · ")}</p>` : ""}
+    <ul class="list">${list.map(a => `<li><div class="grow"><b>${esc(a.type)}</b>${+a.factor<1?" (½)":""}<br>
+    <span class="muted">${fmtDate(a.from)}${a.to&&a.to!==a.from?" – "+fmtDate(a.to):""} · ${dez(workdaysIn(a))} Arbeitstag(e)</span></div>
+    <button class="btn small danger" data-adel="${a.id}">Löschen</button></li>`).join("") || `<li class="empty">Nichts eingetragen.</li>`}</ul></div>`;
+  document.getElementById("yPrev").onclick = () => { abwY--; render(); };
+  document.getElementById("yNext").onclick = () => { abwY++; render(); };
+  document.getElementById("u_ok").onclick = () => { S.settings.urlaubByYear = S.settings.urlaubByYear || {};
+    S.settings.urlaubByYear[y] = +document.getElementById("u_y").value || 0; save(); render(); };
   document.getElementById("a_f").onchange = e => { const t = document.getElementById("a_t"); if (!t.value) t.value = e.target.value; };
   document.getElementById("a_ok").onclick = () => {
     const f = document.getElementById("a_f").value; let t = document.getElementById("a_t").value || f;
     if (!f){ alert("Bitte ein Von-Datum wählen."); return; }
     if (t < f){ alert("Bis-Datum liegt vor dem Von-Datum."); return; }
+    if (lockedMsg(f) || lockedMsg(t)) return;
     S.absences.push({id:uid(), from:f, to:t, type:document.getElementById("a_ty").value, factor:+document.getElementById("a_fa").value});
     save(); render();
   };
-  app.querySelectorAll("[data-adel]").forEach(b => b.onclick = () => { if (confirm("Eintrag löschen?")){ S.absences = S.absences.filter(a => a.id !== b.dataset.adel); save(); render(); } });
+  app.querySelectorAll("[data-adel]").forEach(b => b.onclick = () => { const a = S.absences.find(x => x.id === b.dataset.adel);
+    if (lockedMsg(a.from) || lockedMsg(a.to||a.from)) return;
+    if (confirm("Eintrag löschen?")){ S.absences = S.absences.filter(x => x !== a); save(); render(); } });
+}
+
+/* ---------- Fahrten ---------- */
+let tripY, tripM; { const d = new Date(); tripY = d.getFullYear(); tripM = d.getMonth(); }
+function tripsOf(y,m){ const mk = y + "-" + pad(m+1); return (S.trips||[]).filter(t => t.date.slice(0,7) === mk).sort((a,b)=>a.date.localeCompare(b.date)); }
+function tripRows(y,m){
+  const rate = +S.settings.kmRate || 0, rows = [["Datum","Von","Nach / Ziel","km","Projekt","Zweck","Betrag (€)"]];
+  let km = 0; tripsOf(y,m).forEach(t => { km += +t.km; rows.push([fmtDate(t.date), t.von||"", t.nach||"", +t.km, projName(t.projectId), t.zweck||"", r2(t.km*rate)]); });
+  if (rows.length > 1) rows.push(["Summe","","",r2(km),"","à " + String(rate).replace(".",",") + " €/km",r2(km*rate)]);
+  return rows;
+}
+function renderFahrten(){
+  const list = tripsOf(tripY, tripM), rate = +S.settings.kmRate || 0;
+  const km = list.reduce((a,t)=>a + +t.km, 0);
+  const last = (S.trips||[]).slice(-1)[0] || {};
+  app.innerHTML = `
+  <div class="card">
+    <div class="monthbar"><button class="btn" id="fPrev">‹</button><h3>Fahrten ${MONTHS[tripM]} ${tripY}</h3><button class="btn" id="fNext">›</button></div>
+    <div class="kpis"><div class="kpi"><b>${dez(km)}</b><span>Kilometer</span></div><div class="kpi"><b>${dez(km*rate)} €</b><span>Kilometergeld (${String(rate).replace(".",",")} €/km)</span></div></div>
+    <p class="muted">Die Fahrten sind auch im Monats-Export (Excel/PDF) als eigenes Blatt dabei.</p>
+  </div>
+  <div class="card">
+    <h2>Neue Fahrt</h2>
+    <div class="row"><div><label>Datum</label><input id="t_d" type="date" value="${todayKey()}"></div><div><label>km (einfach)</label><input id="t_km" type="number" step="0.1" min="0" inputmode="decimal"></div></div>
+    <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="t_rt" checked> Hin- und Rückfahrt (km × 2)</label>
+    <div class="row"><div><label>Von</label><input id="t_von" value="${esc(last.von||"")}" placeholder="z.B. Büro"></div><div><label>Nach / Ziel</label><input id="t_nach" placeholder="z.B. Baustelle Hallein"></div></div>
+    <label>Projekt</label><select id="t_p">${projectOptions(S.lastProject)}</select>
+    <label>Zweck</label><input id="t_z" placeholder="z.B. Baustellenbesprechung, Aufmaß">
+    <div class="actions"><button class="btn pri" id="t_ok">Eintragen</button></div>
+  </div>
+  <div class="card"><h2>Eingetragen</h2><ul class="list">${list.map(t => `<li><div class="grow"><b>${fmtDate(t.date)} · ${dez(t.km)} km</b><br>
+    <span class="muted">${esc(t.von||"")} → ${esc(t.nach||"")} · ${esc(projName(t.projectId))}${t.zweck ? " · " + esc(t.zweck) : ""}</span></div>
+    <button class="btn small danger" data-tdel="${t.id}">Löschen</button></li>`).join("") || `<li class="empty">Keine Fahrten in diesem Monat.</li>`}</ul></div>`;
+  document.getElementById("fPrev").onclick = () => { tripM--; if (tripM<0){tripM=11;tripY--;} render(); };
+  document.getElementById("fNext").onclick = () => { tripM++; if (tripM>11){tripM=0;tripY++;} render(); };
+  document.getElementById("t_ok").onclick = () => {
+    const d = document.getElementById("t_d").value; let k = +String(document.getElementById("t_km").value).replace(",", ".");
+    if (!d || !(k > 0)){ alert("Bitte Datum und Kilometer eintragen."); return; }
+    if (lockedMsg(d)) return;
+    if (document.getElementById("t_rt").checked) k *= 2;
+    (S.trips = S.trips || []).push({id:uid(), date:d, km:r2(k), von:document.getElementById("t_von").value.trim(), nach:document.getElementById("t_nach").value.trim(),
+      projectId:document.getElementById("t_p").value || null, zweck:document.getElementById("t_z").value.trim()});
+    save(); render(); };
+  app.querySelectorAll("[data-tdel]").forEach(b => b.onclick = () => { const t = S.trips.find(x => x.id === b.dataset.tdel);
+    if (lockedMsg(t.date)) return; if (confirm("Fahrt löschen?")){ S.trips = S.trips.filter(x => x !== t); save(); render(); } });
 }
 
 /* ---------- Einstellungen ---------- */
@@ -675,19 +819,26 @@ function renderSettings(){
   const s = S.settings;
   app.innerHTML = `
   <div class="card">
-    <h2>Arbeitszeit</h2>
-    <label>Name</label><input id="e_name" value="${esc(s.name)}">
+    <h2>Profil</h2>
+    <div class="row"><div><label>Name</label><input id="e_name" value="${esc(s.name)}"></div><div><label>Firma</label><input id="e_firma" value="${esc(s.firma||"")}"></div></div>
+    <label>Logo (erscheint oben und im PDF)</label>
+    <div class="row" style="align-items:center">${s.logo ? `<img src="${s.logo}" style="height:40px;max-width:140px;object-fit:contain;flex:0 0 auto;background:#fff;border-radius:6px;padding:2px">` : ""}
+      <label class="btn" style="margin:0;display:inline-block;color:var(--ink);flex:0 0 auto">🖼 Logo hochladen<input type="file" id="e_logo" accept="image/*" hidden></label>
+      ${s.logo ? `<button class="btn small danger" id="e_logodel" style="flex:0 0 auto">Entfernen</button>` : ""}</div>
+    <p class="muted">Ein Firmenlogo bitte nur mit Erlaubnis der Firma verwenden.</p>
+    <h2 style="margin-top:22px">Arbeitszeit</h2>
     <label>Eintrittsdatum</label><input id="e_ein" type="date" value="${esc(s.eintritt)}">
     <label>Soll-Stunden pro Wochentag</label>
     <div class="row">${WD.map((w,i)=>`<div><span class="muted">${w}</span><input type="number" step="0.25" min="0" data-soll="${i}" value="${s.soll[i]}"></div>`).join("")}</div>
     <div class="row">
-      <div><label>Urlaubsanspruch (Tage/Jahr)</label><input id="e_url" type="number" step="0.5" value="${s.urlaub}"></div>
-      <div><label>Resturlaub Vorjahr (Tage)</label><input id="e_rest" type="number" step="0.5" value="${s.urlaubRest}"></div>
+      <div><label>Urlaubsanspruch Standard (Tage/Jahr)</label><input id="e_url" type="number" step="0.5" value="${s.urlaub}"></div>
+      <div><label>Resturlaub beim Start (Tage)</label><input id="e_rest" type="number" step="0.5" value="${s.urlaubRest}"></div>
       <div><label>Startsaldo (Std.)</label><input id="e_sal" type="number" step="0.25" value="${s.saldoStart}"></div>
     </div>
     <div class="row">
       <div><label>24.12. frei (0 / 0,5 / 1)</label><input id="e_24" type="number" step="0.5" min="0" max="1" value="${s.f2412}"></div>
       <div><label>31.12. frei (0 / 0,5 / 1)</label><input id="e_31" type="number" step="0.5" min="0" max="1" value="${s.f3112}"></div>
+      <div><label>Kilometergeld (€/km)</label><input id="e_km" type="number" step="0.01" min="0" value="${s.kmRate}"></div>
     </div>
     <div class="actions"><button class="btn pri" id="e_ok">Speichern</button></div>
   </div>
@@ -710,6 +861,8 @@ function renderSettings(){
   </div>`;
   document.getElementById("e_ok").onclick = () => {
     s.name = document.getElementById("e_name").value.trim();
+    s.firma = document.getElementById("e_firma").value.trim();
+    s.kmRate = +document.getElementById("e_km").value || 0;
     s.eintritt = document.getElementById("e_ein").value;
     s.soll = [...app.querySelectorAll("[data-soll]")].map(i => +i.value || 0);
     s.urlaub = +document.getElementById("e_url").value || 0;
@@ -719,6 +872,14 @@ function renderSettings(){
     s.f3112 = +document.getElementById("e_31").value || 0;
     save(); alert("Gespeichert."); render();
   };
+  document.getElementById("e_logo").onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const img = new Image(); img.onload = () => {
+      const h = Math.min(160, img.height), w = Math.round(img.width * h / img.height);
+      const c = document.createElement("canvas"); c.width = w; c.height = h; c.getContext("2d").drawImage(img, 0, 0, w, h);
+      s.logo = c.toDataURL("image/png"); URL.revokeObjectURL(img.src); save(); render(); };
+    img.src = URL.createObjectURL(f); };
+  if (document.getElementById("e_logodel")) document.getElementById("e_logodel").onclick = () => { s.logo = ""; save(); render(); };
   document.getElementById("x_ok").onclick = () => {
     const d = document.getElementById("x_d").value; if (!d) return;
     S.extraDays.push({date:d, name:document.getElementById("x_n").value.trim()||"Freier Tag", f:1}); save(); render();
